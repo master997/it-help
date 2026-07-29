@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IT Help — ask it something</title>
+<style>
+  :root {
+    --bg: #fbfaf8;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --line: #e3e0da;
+    --card: #ffffff;
+    --accent: #1a1a1a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161a;
+      --fg: #ececec;
+      --muted: #9a9a9a;
+      --line: #2e2e34;
+      --card: #1e1e23;
+      --accent: #ececec;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.25rem 4rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 42rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 .4rem; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0 0 2rem; }
+  form { display: flex; gap: .5rem; margin-bottom: .9rem; }
+  input {
+    flex: 1; padding: .8rem .9rem; font-size: 1rem; font-family: inherit;
+    border: 1px solid var(--line); border-radius: 9px;
+    background: var(--card); color: var(--fg);
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    padding: .8rem 1.2rem; font-size: 1rem; font-family: inherit; font-weight: 500;
+    border: 0; border-radius: 9px; cursor: pointer;
+    background: var(--accent); color: var(--bg);
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: 2rem; }
+  .chip {
+    font-size: .85rem; padding: .4rem .7rem; cursor: pointer;
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 99px; font-weight: 400;
+  }
+  .chip:hover { color: var(--fg); border-color: var(--fg); }
+  /* pre-wrap only on the answer text — on the container it would render
+     the HTML template's own indentation as blank lines. */
+  .answer-text { white-space: pre-wrap; }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 11px; padding: 1.1rem 1.25rem; margin-bottom: .8rem;
+  }
+  .card.refusal { border-style: dashed; }
+  .label {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); margin-bottom: .5rem;
+  }
+  .thinking { color: var(--muted); }
+  footer {
+    margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .88rem;
+  }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>IT Help</h1>
+  <p class="sub">An internal IT helpdesk that answers from written guides — and admits when it can't.</p>
+
+  <form id="f">
+    <input id="q" placeholder="my wifi keeps dropping" autocomplete="off" maxlength="300" required>
+    <button type="submit">Ask</button>
+  </form>
+
+  <div class="chips">
+    <button class="chip" type="button">someone nicked my laptop</button>
+    <button class="chip" type="button">the meeting room screen won't connect</button>
+    <button class="chip" type="button">I've forgotten my Mac password</button>
+    <button class="chip" type="button">how do I expense a taxi</button>
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    Every answer comes only from
+    <a href="https://github.com/master997/it-help/tree/main/guides">five short guides</a>
+    — nothing is invented. Ask something they don't cover and it will say so, and log the
+    gap for a human. Built by Mohammed Ali.
+    <a href="https://github.com/master997/it-help">Source</a>.
+  </footer>
+</main>
+
+<script>
+  const form = document.getElementById("f");
+  const input = document.getElementById("q");
+  const out = document.getElementById("out");
+  const button = form.querySelector("button");
+
+  document.querySelectorAll(".chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      input.value = chip.textContent;
+      form.requestSubmit();
+    });
+  });
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const question = input.value.trim();
+    if (!question) return;
+
+    button.disabled = true;
+    out.innerHTML = '<div class="card thinking">Looking that up…</div>';
+
+    try {
+      const response = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        out.innerHTML = card("Error", data.detail || "Something went wrong.", false);
+        return;
+      }
+      out.innerHTML = card(
+        data.answered ? "Answer" : "No guide for this",
+        data.answer,
+        !data.answered
+      );
+    } catch {
+      out.innerHTML = card("Error", "Couldn't reach the server. Try again.", false);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  function card(label, text, refusal) {
+    // textContent then innerHTML escapes whatever the model returned, so a
+    // question containing markup can't inject anything into the page.
+    const escaper = document.createElement("div");
+    escaper.textContent = text;
+    return `<div class="card${refusal ? " refusal" : ""}"><div class="label">${label}</div><div class="answer-text">${escaper.innerHTML}</div></div>`;
+  }
+</script>
+</body>
+</html>

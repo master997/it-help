@@ -13,10 +13,13 @@ import hmac
 import json
 import os
 import time
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 from app.brain import answer
 from app.tickets import log_ticket, record_feedback
@@ -26,6 +29,15 @@ load_dotenv()
 app = FastAPI()
 
 TICKET_CHANNEL = "#it-tickets"
+
+DEMO_PAGE = Path(__file__).parent / "demo.html"
+MAX_QUESTION_CHARS = 300
+RATE_LIMIT = 10  # questions per IP per minute on the public demo
+RATE_WINDOW = 60
+
+# In-memory and per-instance, so it resets on redeploy — enough to stop a
+# bored visitor burning the Gemini quota, not a real abuse defence.
+_recent_by_ip: dict[str, list[float]] = {}
 
 REFUSAL_REPLY = (
     "I don't have a guide for this yet — I've logged it as ticket #{tid} so "
@@ -155,6 +167,60 @@ async def interactions(request: Request):
     tid = int(action["value"])
     record_feedback(tid, "up" if action["action_id"] == "feedback_up" else "down")
     return {"text": "Thanks — noted."}
+
+
+class WebQuestion(BaseModel):
+    question: str
+
+
+def _rate_limited(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _recent_by_ip.get(ip, []) if now - t < RATE_WINDOW]
+    hits.append(now)
+    _recent_by_ip[ip] = hits
+    return len(hits) > RATE_LIMIT
+
+
+@app.get("/", response_class=HTMLResponse)
+def demo_page() -> str:
+    """The public demo — one box, ask it anything."""
+    return DEMO_PAGE.read_text()
+
+
+# Sync def on purpose: answer() blocks on network calls, and FastAPI runs
+# sync endpoints in a threadpool rather than on the event loop.
+@app.post("/ask")
+def ask(payload: WebQuestion, request: Request) -> dict[str, object]:
+    """Public, unauthenticated door — hence the cap and the rate limit."""
+    question = payload.question.strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="Ask a question.")
+    if len(question) > MAX_QUESTION_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Keep it under {MAX_QUESTION_CHARS} characters.",
+        )
+
+    # Render sits behind a proxy, so the real client IP is in the header.
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    ip = forwarded.split(",")[0].strip() or "unknown"
+    if _rate_limited(ip):
+        raise HTTPException(
+            status_code=429, detail="That's a lot of questions — give it a minute."
+        )
+
+    result = answer(question)
+    tid = log_ticket("web", question, result)
+
+    if result["answered"]:
+        text = str(result["reply"]).replace("**", "")
+    else:
+        text = (
+            "I don't have a guide covering that, so I haven't guessed. "
+            f"It's logged as ticket #{tid} — that list is what tells IT "
+            "which guide to write next."
+        )
+    return {"answered": bool(result["answered"]), "answer": text}
 
 
 @app.post("/voice/ask")

@@ -6,6 +6,9 @@ in Slack, and logs every question — including the ones it can't answer.
 That last part is the point. The unanswered questions are a to-do list written
 by your colleagues, telling you which guide to write next.
 
+**Ask it something: https://it-help-f8gb.onrender.com** — try to catch it out.
+Anything the guides don't cover, it refuses rather than guessing.
+
 ## What it looks like
 
 Someone types this in any Slack channel:
@@ -76,7 +79,7 @@ guide look identical.
 
 ```
 /it-help in Slack ─┐
-                   ├─► FastAPI ─► retrieval ─► Gemini ─► answer
+web page (GET /) ──┼─► FastAPI ─► retrieval ─► Gemini ─► answer
 POST /voice/ask ───┘                                        │
                                                             ▼
                                               ticket logged + posted
@@ -92,7 +95,8 @@ nothing.
 | [`guides/`](guides/) | The knowledge. Plain markdown. |
 | [`app/retrieval.py`](app/retrieval.py) | Splits guides into sections, finds the closest ones to a question. |
 | [`app/brain.py`](app/brain.py) | Answers from those sections only, or returns `NO_GUIDE`. |
-| [`app/server.py`](app/server.py) | Slack slash command, buttons, tickets, voice endpoint. |
+| [`app/server.py`](app/server.py) | Slack slash command, buttons, tickets, web page, voice endpoint. |
+| [`app/demo.html`](app/demo.html) | The public try-it page. One file, no dependencies. |
 | [`app/tickets.py`](app/tickets.py) | SQLite log and the write-this-next report. |
 | [`tests/test_retrieval.py`](tests/test_retrieval.py) | Ten deliberately messy questions. |
 
