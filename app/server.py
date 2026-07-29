@@ -167,6 +167,35 @@ async def interactions(request: Request):
     return {"text": "Thanks — noted."}
 
 
+@app.post("/voice/ask")
+async def voice_ask(request: Request):
+    """The voice door: the ElevenLabs agent calls this as a webhook tool.
+
+    Same brain, same ticket log as Slack — only the door differs.
+    """
+    if request.headers.get("X-Voice-Key", "") != _env("VOICE_API_KEY"):
+        raise HTTPException(status_code=401, detail="Bad voice key")
+
+    payload = await request.json()
+    question = str(payload.get("question", "")).strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="No question given")
+
+    result = answer(question)
+    tid = log_ticket("voice", question, result)
+
+    if result["answered"]:
+        # Spoken answers: no markdown symbols for the voice to read out.
+        reply = str(result["reply"]).replace("**", "").replace("*", "")
+    else:
+        reply = (
+            "I don't have a guide for that yet, so I've logged it as "
+            f"ticket {tid} for the IT team. For anything urgent, post "
+            "in the it-help channel."
+        )
+    return {"answer": reply}
+
+
 @app.get("/health")
 def health():
     return {"ok": True}

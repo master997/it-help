@@ -5,7 +5,7 @@
 Every room has the same kit: a screen, a USB-C cable on the table, a camera
 above the screen, and an iPad by the door.
 
-## I plugged in and the screen is black (HDMI or USB-C)
+## The screen won't connect — I plugged in and it's black (HDMI or USB-C)
 
 Work down the list — it's almost always step 1 or 2.
 
