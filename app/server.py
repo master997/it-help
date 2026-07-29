@@ -19,11 +19,21 @@ from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from app.brain import answer
+from app.retrieval import INDEX_DIR, build_index
 from app.tickets import log_ticket, record_feedback
 
 load_dotenv()
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+def ensure_index() -> None:
+    # A fresh deploy has no chroma_db/ (it's gitignored — derived data,
+    # rebuilt from the guides). Without this, the first question crashes.
+    if not INDEX_DIR.exists():
+        count = build_index()
+        print(f"Built search index: {count} guide sections")
 
 TICKET_CHANNEL = "#it-tickets"
 
