@@ -5,7 +5,7 @@
 Every room has the same kit: a screen, a USB-C cable on the table, a camera
 above the screen, and an iPad by the door.
 
-## I plugged in and the screen is black
+## I plugged in and the screen is black (HDMI or USB-C)
 
 Work down the list — it's almost always step 1 or 2.
 
@@ -20,8 +20,9 @@ Work down the list — it's almost always step 1 or 2.
 4. **Check you're not on the wrong input.** On the iPad, tap **Share screen**.
    If it's already highlighted, tap it off and on again.
 5. **Try the spare cable.** Each room has a second cable in the drawer under
-   the screen. If that works, leave the broken one on the table and tell us —
-   don't put it back in the drawer.
+   the screen, plus an HDMI adapter if your laptop only has an HDMI lead. If
+   the spare works, leave the broken one on the table and tell us — don't put
+   it back in the drawer.
 
 Still black after all five: move rooms if people are waiting, then post in
 #it-help with the room name. Getting the room name saves us ten minutes.

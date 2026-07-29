@@ -28,8 +28,12 @@ connects to the internet, it locks.
 
 ## It's been stolen
 
-Do the steps above, and say clearly that it was stolen rather than mislaid — we
-treat the two differently.
+If your laptop was stolen, nicked, taken, or robbed — from a bag, a car, a cafe
+table —
+the first move is the same as a loss: **post in #it-help immediately** (or call
+the on-call number out of hours) and say clearly that it was stolen rather than
+mislaid, because we treat the two differently. We'll lock it remotely straight
+away.
 
 Then:
 
