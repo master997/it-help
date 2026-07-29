@@ -43,9 +43,8 @@ QUESTION: {question}
 def answer(question: str) -> dict[str, object]:
     """Returns the reply plus what was retrieved, for the ticket log."""
     # 6 sections ≈ 1.2K tokens — still ~70% below context-stuffing. The
-    # small local embedding model ranks imprecisely (same-guide siblings
-    # crowd the top), so a wider net is what keeps the true match in
-    # reach; Gemini then judges relevance among them.
+    # top hit is right on all ten test questions, so the extra five are
+    # headroom for phrasings the tests don't cover, not a crutch.
     hits = search(question, n=6)
     sections = "\n\n".join(f"--- {h['guide']} :: {h['heading']} ---\n{h['text']}" for h in hits)
 

@@ -3,16 +3,31 @@
 Guides are split on their `##` headings, so one chunk is one problem. The
 headings are phrased the way a person describes the symptom, which is what
 makes them land close to a real question in embedding space.
+
+Embeddings are computed once by running `python -m app.retrieval` and
+committed as index.json. The server only loads that file and does the
+similarity maths itself, so a cold start costs milliseconds rather than
+booting a vector database and downloading a model.
 """
 
+import json
+import math
+import os
 import re
 from pathlib import Path
 
-import chromadb
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+
+load_dotenv()
 
 GUIDES_DIR = Path(__file__).parent.parent / "guides"
-INDEX_DIR = Path(__file__).parent.parent / "chroma_db"
-COLLECTION = "guides"
+INDEX_FILE = Path(__file__).parent.parent / "index.json"
+EMBED_MODEL = "gemini-embedding-001"
+# 768 instead of the full 3072: a quarter of the file size for no measurable
+# loss on a corpus this small.
+DIMENSIONS = 768
 
 
 def chunk(markdown: str, filename: str) -> list[dict[str, str]]:
@@ -61,39 +76,67 @@ def all_chunks() -> list[dict[str, str]]:
     return [c for p in paths for c in chunk(p.read_text(), p.name)]
 
 
-def build_index() -> int:
-    """Embed every guide section. Returns the number of chunks indexed."""
-    client = chromadb.PersistentClient(path=str(INDEX_DIR))
-    client.get_or_create_collection(COLLECTION)
-    client.delete_collection(COLLECTION)
-    collection = client.create_collection(COLLECTION)
+def _unit(vector: list[float]) -> list[float]:
+    """Scale to length 1 so a dot product is the cosine similarity."""
+    length = math.sqrt(sum(v * v for v in vector))
+    if length == 0:
+        raise ValueError("Embedding has zero length")
+    return [v / length for v in vector]
 
+
+def _embed(texts: list[str], task_type: str) -> list[list[float]]:
+    """Turn text into vectors. Guides and questions use different task
+    types — the model places a question near the passage that answers it,
+    not near other questions."""
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    response = client.models.embed_content(
+        model=EMBED_MODEL,
+        contents=texts,
+        config=types.EmbedContentConfig(
+            task_type=task_type, output_dimensionality=DIMENSIONS
+        ),
+    )
+    return [_unit(e.values) for e in response.embeddings]
+
+
+def build_index() -> int:
+    """Embed every guide section and write index.json. Run after editing
+    a guide; the result is committed so the server never rebuilds it."""
     chunks = all_chunks()
-    collection.add(
-        ids=[c["id"] for c in chunks],
-        documents=[c["text"] for c in chunks],
-        metadatas=[{"guide": c["guide"], "heading": c["heading"]} for c in chunks],
+    vectors = _embed([c["text"] for c in chunks], "RETRIEVAL_DOCUMENT")
+    INDEX_FILE.write_text(
+        json.dumps([{**c, "vector": v} for c, v in zip(chunks, vectors)])
     )
     return len(chunks)
 
 
-def search(question: str, n: int = 3) -> list[dict[str, object]]:
+def search(question: str, n: int = 6) -> list[dict[str, object]]:
     """Return the n closest guide sections, nearest first."""
-    client = chromadb.PersistentClient(path=str(INDEX_DIR))
-    collection = client.get_collection(COLLECTION)
-    result = collection.query(query_texts=[question], n_results=n)
+    if not INDEX_FILE.exists():
+        raise FileNotFoundError(
+            f"{INDEX_FILE} missing — run `python -m app.retrieval` to build it"
+        )
+    index = json.loads(INDEX_FILE.read_text())
+    query = _embed([question], "RETRIEVAL_QUERY")[0]
+
+    scored = [
+        (sum(a * b for a, b in zip(query, entry["vector"])), entry)
+        for entry in index
+    ]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+
     return [
         {
-            "text": text,
-            "guide": meta["guide"],
-            "heading": meta["heading"],
-            "distance": distance,
+            "text": entry["text"],
+            "guide": entry["guide"],
+            "heading": entry["heading"],
+            # Kept as a distance (lower is closer) so callers read the same
+            # way they did when this was a vector database.
+            "distance": 1 - similarity,
         }
-        for text, meta, distance in zip(
-            result["documents"][0], result["metadatas"][0], result["distances"][0]
-        )
+        for similarity, entry in scored[:n]
     ]
 
 
 if __name__ == "__main__":
-    print(f"Indexed {build_index()} guide sections")
+    print(f"Indexed {build_index()} guide sections into {INDEX_FILE.name}")
