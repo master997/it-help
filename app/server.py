@@ -100,7 +100,16 @@ def answer_and_respond(question: str, user: str, response_url: str) -> None:
     ]
     httpx.post(
         response_url,
-        json={"response_type": "ephemeral", "text": text, "blocks": blocks},
+        # replace_original=False is required: without it, Slack edits the
+        # private "Looking that up…" message in place, and an edited
+        # ephemeral message stays ephemeral no matter what response_type
+        # says. This posts a genuinely new, genuinely public message.
+        json={
+            "response_type": "in_channel",
+            "replace_original": False,
+            "text": text,
+            "blocks": blocks,
+        },
         timeout=10,
     )
     post_ticket_to_channel(tid, user, question, bool(result["answered"]))
@@ -123,8 +132,12 @@ async def slash_command(request: Request, background: BackgroundTasks):
         return {"response_type": "ephemeral", "text": "Ask me something: `/it-help my wifi keeps dropping`"}
 
     background.add_task(answer_and_respond, question, user, response_url)
-    # This ack is what beats Slack's 3-second timeout.
-    return {"response_type": "ephemeral", "text": "Looking that up…"}
+    # This ack is what beats Slack's 3-second timeout. It must be
+    # in_channel: the ack's visibility anchors the whole exchange — an
+    # ephemeral ack makes Slack hide the user's typed command AND keep
+    # every follow-up on this response_url private, regardless of what
+    # response_type the follow-up asks for.
+    return {"response_type": "in_channel", "text": "Looking that up…"}
 
 
 @app.post("/slack/interactions")
