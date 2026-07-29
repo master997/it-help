@@ -74,7 +74,8 @@ def answer_and_respond(question: str, user: str, response_url: str) -> None:
     tid = log_ticket("slack", question, result)
 
     if result["answered"]:
-        text = str(result["reply"])
+        # Slack's mrkdwn uses *bold*, not markdown's **bold**.
+        text = str(result["reply"]).replace("**", "*")
     else:
         text = REFUSAL_REPLY.format(tid=tid)
 
