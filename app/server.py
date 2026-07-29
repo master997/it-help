@@ -252,6 +252,9 @@ async def voice_ask(request: Request):
     return {"answer": reply}
 
 
-@app.get("/health")
+# HEAD as well as GET: uptime monitors default to HEAD because it's cheaper,
+# and a GET-only health check answers them with 405 — which reads as "down"
+# even while the service is perfectly healthy.
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"ok": True}
