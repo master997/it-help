@@ -118,6 +118,13 @@ correctly on one run and refused on the next. A helpdesk that varies run to run
 can't be tested or trusted. This buys consistent *behaviour*, not identical
 wording — there's still nondeterminism below it.
 
+**The free tier sleeps, so it gets pinged.** Render spins a free service
+down after ~15 minutes idle and takes ~50 seconds to wake — but Slack kills a
+slash command after 3, so the first question of the day would always fail.
+A [scheduled GitHub Action](.github/workflows/keep-warm.yml) hits `/health`
+every 10 minutes to keep it up. Free, and it lives in the repo rather than in
+someone's memory.
+
 **False refusals are the dangerous failure.** An invented answer is obviously
 broken; "I don't have a guide for this" when a guide exists looks fine and
 quietly sends someone to a human. That's why the log records what was
