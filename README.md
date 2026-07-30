@@ -1,17 +1,20 @@
 # it-help
 
-An internal IT helpdesk that answers colleagues' questions from written guides,
-in Slack, and logs every question — including the ones it can't answer.
+An internal IT helpdesk that answers colleagues' questions from written guides —
+by text or out loud — and logs every question, including the ones it can't answer.
 
 That last part is the point. The unanswered questions are a to-do list written
 by your colleagues, telling you which guide to write next.
 
-**Ask it something: https://it-help-f8gb.onrender.com** — try to catch it out.
-Anything the guides don't cover, it refuses rather than guessing.
+**Try it: https://it-help-f8gb.onrender.com** — type a question, or press the
+button in the corner and ask out loud. Try to catch it out; anything the guides
+don't cover, it refuses rather than guessing.
 
 ## What it looks like
 
-Someone types this in any Slack channel:
+Three ways in, one brain behind all of them.
+
+**In Slack**, someone types this in any channel:
 
 ```
 /it-help my wifi keeps dropping
@@ -21,8 +24,18 @@ Two seconds later they get the actual steps from the Wi-Fi guide, with 👍 / �
 buttons underneath. A ticket lands in `#it-tickets` at the same time, so IT can
 see the queue without anyone filing anything.
 
-If no guide covers the question, it says so plainly rather than inventing an
-answer:
+**On the web page**, the same question typed into a box gets the same answer.
+
+**Out loud**, an ElevenLabs voice agent takes the question, calls the same
+lookup, and talks the person through it a step at a time. Voice matters more
+than it looks: three of the five guides cover situations where the person has no
+working computer — forgotten Mac password, lost laptop, lost phone so 2FA is
+gone. Slack is unreachable in all three, because they're locked out of the
+device it runs on. That's the out-of-band channel problem real IT teams keep a
+phone line for.
+
+If no guide covers the question, every door says so plainly rather than
+inventing an answer:
 
 > I don't have a guide for this yet — I've logged it as ticket #7 so IT sees it.
 > For anything urgent, post in #it-help.
@@ -78,12 +91,12 @@ guide look identical.
 ## How it works
 
 ```
-/it-help in Slack ─┐
-web page (GET /) ──┼─► FastAPI ─► retrieval ─► Gemini ─► answer
-POST /voice/ask ───┘                                        │
-                                                            ▼
-                                              ticket logged + posted
-                                                  to #it-tickets
+/it-help in Slack ────────┐
+web page (GET /)  ────────┼─► FastAPI ─► retrieval ─► Gemini ─► answer
+voice agent (/voice/ask) ─┘                                       │
+                                                                  ▼
+                                                    ticket logged + posted
+                                                        to #it-tickets
 ```
 
 The doors are deliberately thin. They take a question, hand it to the same
@@ -96,9 +109,10 @@ nothing.
 | [`app/retrieval.py`](app/retrieval.py) | Splits guides into sections, finds the closest ones to a question. |
 | [`app/brain.py`](app/brain.py) | Answers from those sections only, or returns `NO_GUIDE`. |
 | [`app/server.py`](app/server.py) | Slack slash command, buttons, tickets, web page, voice endpoint. |
-| [`app/demo.html`](app/demo.html) | The public try-it page. One file, no dependencies. |
+| [`app/demo.html`](app/demo.html) | The public try-it page. One file; loads the ElevenLabs widget for the voice door. |
 | [`app/tickets.py`](app/tickets.py) | SQLite log and the write-this-next report. |
 | [`tests/test_retrieval.py`](tests/test_retrieval.py) | Ten deliberately messy questions. |
+| [`tests/preflight.py`](tests/preflight.py) | Pre-demo checks against the live service. |
 
 ## Engineering notes
 
@@ -122,12 +136,22 @@ correctly on one run and refused on the next. A helpdesk that varies run to run
 can't be tested or trusted. This buys consistent *behaviour*, not identical
 wording — there's still nondeterminism below it.
 
-**The free tier sleeps, so it gets pinged.** Render spins a free service
-down after ~15 minutes idle and takes ~50 seconds to wake — but Slack kills a
-slash command after 3, so the first question of the day would always fail.
-A [scheduled GitHub Action](.github/workflows/keep-warm.yml) hits `/health`
-every 10 minutes to keep it up. Free, and it lives in the repo rather than in
-someone's memory.
+**The free tier sleeps, so it gets pinged.** Render spins a free service down
+after ~15 minutes idle and takes 40–90 seconds to wake. Slack kills a slash
+command after 3 seconds, and ElevenLabs webhook tools time out at 20 by
+default — so a sleeping service breaks two of the three doors, and looks like a
+configuration bug rather than a hosting one. An UptimeRobot monitor hits
+`/health` every 5 minutes; a [GitHub Action](.github/workflows/keep-warm.yml)
+does the same every 10 as a backup, though scheduled Actions drift by 15–30
+minutes so it can't be the primary.
+
+**A health check has to answer HEAD.** UptimeRobot reported the service down for
+20 minutes while it was serving every real request fine. Uptime monitors default
+to `HEAD` because it's cheaper, and the route only declared `GET`, so every check
+got a 405. The pings were keeping it warm the whole time — only the reporting
+was broken. Worth knowing because the failure is invisible from the inside:
+every `GET` I tested by hand returned 200. `tests/preflight.py` now checks
+`/health` with the same method the monitor uses.
 
 **False refusals are the dangerous failure.** An invented answer is obviously
 broken; "I don't have a guide for this" when a guide exists looks fine and
@@ -154,22 +178,34 @@ VOICE_API_KEY=...          # any random string; only needed for /voice/ask
 Then:
 
 ```bash
-python -m app.retrieval          # build index.json (only after editing guides)
+python -m app.retrieval          # rebuild index.json — required after editing a guide
 python -m tests.test_retrieval   # ten messy questions, expects 10/10
+python -m tests.preflight        # checks the live service before a demo
 python -m app.brain "my wifi keeps dropping"
+python -m app.tickets report     # the write-this-next queue
 uvicorn app.server:app --reload
 ```
 
+**`python -m app.retrieval` is not optional after editing a guide.** The
+embeddings live in `index.json`, so an edited guide with a stale index answers
+from superseded text and nothing looks wrong. `tests/preflight.py` compares the
+two and fails if they've drifted.
+
 For Slack, point a slash command at `POST /slack/commands` and interactivity at
-`POST /slack/interactions`, with scopes `chat:write` and `commands`. Deploys to
-Render from [`render.yaml`](render.yaml).
+`POST /slack/interactions`, with scopes `chat:write` and `commands`. For voice,
+an ElevenLabs agent calls `POST /voice/ask` as a webhook tool with an
+`X-Voice-Key` header, and the widget on the page is scoped to this domain via
+the agent's allowlist. Deploys to Render from [`render.yaml`](render.yaml).
 
 ## Not built
 
-- **Voice.** `POST /voice/ask` exists and works — it's the same brain with
-  markdown stripped for speech, ready for a voice agent to call as a webhook
-  tool. No agent is wired to it here.
 - **Ticketing integration.** Tickets are SQLite plus a Slack channel. In
-  production the same function would write to Jira, Linear, or ServiceNow.
+  production the same function would write to Jira, Linear, or ServiceNow —
+  ElevenLabs already ship ServiceNow and Zendesk connectors for agents, so the
+  production path is one connector away.
+- **A phone number.** The voice agent answers in the browser. Attaching a real
+  number needs a paid tier plus Twilio, and it's the version that would matter
+  most in practice — someone locked out of their laptop can't open a web page
+  either.
 - **Anything that changes state.** It reads guides and answers questions. It
   can't reset a password or unlock an account, deliberately.
