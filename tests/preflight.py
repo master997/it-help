@@ -1,9 +1,11 @@
-"""Pre-demo checklist. Run this before recording or sending anything.
+"""Smoke test for a running deployment.
 
     python -m tests.preflight
+    python -m tests.preflight https://your-deployment.example.com
 
 Checks the things that fail silently: a search index that no longer matches
-the guides, a sleeping server, and the two answers the demo depends on.
+the guides, a sleeping server, and the two answers the health check depends on.
+Defaults to the public deployment; pass a URL to check any other instance.
 """
 
 import json
@@ -14,18 +16,18 @@ import urllib.request
 
 from app.retrieval import INDEX_FILE, all_chunks
 
-LIVE = "https://it-help-f8gb.onrender.com"
+DEFAULT_URL = "https://it-help-f8gb.onrender.com"
 TIMEOUT = 90
 
-# The demo script: one question that must answer, one that must refuse.
-DEMO_ANSWER = "my wifi keeps dropping"
-DEMO_REFUSAL = "how do i expense a taxi"
+# One question that must answer, one that must refuse.
+SAMPLE_ANSWER = "my wifi keeps dropping"
+SAMPLE_REFUSAL = "how do i expense a taxi"
 
 
-def _request(path: str, body: dict | None = None, method: str | None = None):
+def _request(base_url: str, path: str, body: dict | None = None, method: str | None = None):
     data = json.dumps(body).encode() if body else None
     request = urllib.request.Request(
-        f"{LIVE}{path}",
+        f"{base_url}{path}",
         data=data,
         headers={"Content-Type": "application/json"} if data else {},
         method=method or ("POST" if data else "GET"),
@@ -36,7 +38,7 @@ def _request(path: str, body: dict | None = None, method: str | None = None):
         return response.status, payload, time.monotonic() - started
 
 
-def check_index_fresh() -> tuple[bool, str]:
+def check_index_fresh(base_url: str) -> tuple[bool, str]:
     """Guides edited without rebuilding the index is the silent failure —
     everything looks fine and answers come from superseded text."""
     if not INDEX_FILE.exists():
@@ -60,53 +62,54 @@ def check_index_fresh() -> tuple[bool, str]:
     return False, f"STALE ({detail}) — run `python -m app.retrieval` and commit"
 
 
-def check_head() -> tuple[bool, str]:
+def check_head(base_url: str) -> tuple[bool, str]:
     """Uptime monitors use HEAD; a 405 here reads as an outage."""
-    status, _, _ = _request("/health", method="HEAD")
+    status, _, _ = _request(base_url, "/health", method="HEAD")
     return status == 200, f"HEAD /health -> {status}"
 
 
-def check_warm() -> tuple[bool, str]:
-    """Over ~5s means it was asleep — wait and re-run before recording."""
-    status, _, elapsed = _request("/health")
+def check_warm(base_url: str) -> tuple[bool, str]:
+    """Over ~5s means it was asleep — wait and re-run."""
+    status, _, elapsed = _request(base_url, "/health")
     return status == 200 and elapsed < 5, f"GET /health -> {status} in {elapsed:.2f}s"
 
 
-def check_page() -> tuple[bool, str]:
-    status, payload, _ = _request("/")
+def check_page(base_url: str) -> tuple[bool, str]:
+    status, payload, _ = _request(base_url, "/")
     ok = status == 200 and b"IT Help" in payload
     return ok, f"GET / -> {status}, {len(payload)} bytes"
 
 
-def check_demo_answer() -> tuple[bool, str]:
-    _, payload, elapsed = _request("/ask", {"question": DEMO_ANSWER})
+def check_sample_answer(base_url: str) -> tuple[bool, str]:
+    _, payload, elapsed = _request(base_url, "/ask", {"question": SAMPLE_ANSWER})
     data = json.loads(payload)
     ok = data.get("answered") is True
-    return ok, f"{DEMO_ANSWER!r} -> answered={data.get('answered')} in {elapsed:.1f}s"
+    return ok, f"{SAMPLE_ANSWER!r} -> answered={data.get('answered')} in {elapsed:.1f}s"
 
 
-def check_demo_refusal() -> tuple[bool, str]:
-    _, payload, _ = _request("/ask", {"question": DEMO_REFUSAL})
+def check_sample_refusal(base_url: str) -> tuple[bool, str]:
+    _, payload, _ = _request(base_url, "/ask", {"question": SAMPLE_REFUSAL})
     data = json.loads(payload)
     ok = data.get("answered") is False
-    return ok, f"{DEMO_REFUSAL!r} -> answered={data.get('answered')} (want False)"
+    return ok, f"{SAMPLE_REFUSAL!r} -> answered={data.get('answered')} (want False)"
 
 
 CHECKS = [
     ("Search index matches guides", check_index_fresh),
     ("Health answers HEAD", check_head),
     ("Server is warm", check_warm),
-    ("Demo page loads", check_page),
-    ("Demo question answers", check_demo_answer),
-    ("Demo question refuses", check_demo_refusal),
+    ("Page loads", check_page),
+    ("Sample question answers", check_sample_answer),
+    ("Sample question refuses", check_sample_refusal),
 ]
 
 
-def main() -> int:
+def main(base_url: str) -> int:
+    print(f"Checking {base_url}\n")
     failures = 0
     for name, check in CHECKS:
         try:
-            ok, detail = check()
+            ok, detail = check(base_url)
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             ok, detail = False, f"request failed: {error}"
         if not ok:
@@ -114,12 +117,10 @@ def main() -> int:
         print(f"{'PASS' if ok else 'FAIL'}  {name}\n      {detail}")
 
     print()
-    if failures:
-        print(f"{failures} check(s) failed — fix before recording.")
-    else:
-        print("All clear. Safe to record and send.")
+    print(f"{failures} check(s) failed." if failures else "All checks passed.")
     return failures
 
 
 if __name__ == "__main__":
-    raise SystemExit(1 if main() else 0)
+    url = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_URL
+    raise SystemExit(1 if main(url) else 0)

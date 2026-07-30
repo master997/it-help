@@ -112,7 +112,7 @@ nothing.
 | [`app/demo.html`](app/demo.html) | The public try-it page. One file; loads the ElevenLabs widget for the voice door. |
 | [`app/tickets.py`](app/tickets.py) | SQLite log and the write-this-next report. |
 | [`tests/test_retrieval.py`](tests/test_retrieval.py) | Ten deliberately messy questions. |
-| [`tests/preflight.py`](tests/preflight.py) | Pre-demo checks against the live service. |
+| [`tests/preflight.py`](tests/preflight.py) | Smoke test against a running deployment. |
 
 ## Engineering notes
 
@@ -180,7 +180,7 @@ Then:
 ```bash
 python -m app.retrieval          # rebuild index.json — required after editing a guide
 python -m tests.test_retrieval   # ten messy questions, expects 10/10
-python -m tests.preflight        # checks the live service before a demo
+python -m tests.preflight        # smoke test — checks the deployed URL, or pass your own
 python -m app.brain "my wifi keeps dropping"
 python -m app.tickets report     # the write-this-next queue
 uvicorn app.server:app --reload
