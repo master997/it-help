@@ -3,105 +3,121 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IT Help — ask it something</title>
+<title>IT Help</title>
 <style>
-  :root {
-    --bg: #fbfaf8;
-    --fg: #1a1a1a;
-    --muted: #6b6b6b;
-    --line: #e3e0da;
-    --card: #ffffff;
-    --accent: #1a1a1a;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #16161a;
-      --fg: #ececec;
-      --muted: #9a9a9a;
-      --line: #2e2e34;
-      --card: #1e1e23;
-      --accent: #ececec;
-    }
-  }
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
-    padding: 2rem 1.25rem 4rem;
-    background: var(--bg);
-    color: var(--fg);
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
+    /* Generous bottom padding so the floating voice widget never covers
+       the footer, which it does on a phone at 5rem. */
+    padding: 3rem 1.5rem 10rem;
+    background: #fdfdfc;
+    color: #141414;
+    font: 16px/1.65 Charter, Palatino, "Palatino Linotype", Georgia, serif;
   }
-  main { max-width: 42rem; margin: 0 auto; }
-  h1 { font-size: 1.5rem; margin: 0 0 .4rem; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); margin: 0 0 2rem; }
-  form { display: flex; gap: .5rem; margin-bottom: .9rem; }
+
+  main { max-width: 34rem; margin: 0 auto; }
+
+  /* Monospace for anything that is UI rather than prose — labels, the
+     suggested questions, the footer. Keeps the chrome and the content
+     visually separate without needing boxes or colour. */
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  h1 {
+    font-size: 1.1rem; font-weight: 600; margin: 0 0 .3rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .sub { color: #5c5c5c; margin: 0 0 2.5rem; font-size: .95rem; }
+
+  form { display: flex; border-bottom: 1px solid #141414; }
   input {
-    flex: 1; padding: .8rem .9rem; font-size: 1rem; font-family: inherit;
-    border: 1px solid var(--line); border-radius: 9px;
-    background: var(--card); color: var(--fg);
+    flex: 1; padding: .6rem 0; font-size: 1rem; font-family: inherit;
+    border: 0; background: transparent; color: #141414;
   }
-  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  button {
-    padding: .8rem 1.2rem; font-size: 1rem; font-family: inherit; font-weight: 500;
-    border: 0; border-radius: 9px; cursor: pointer;
-    background: var(--accent); color: var(--bg);
+  input::placeholder { color: #a5a5a5; }
+  input:focus { outline: none; }
+  form button {
+    border: 0; background: transparent; cursor: pointer; padding: .6rem 0 .6rem 1rem;
+    font-size: .8rem; letter-spacing: .08em; text-transform: uppercase;
+    color: #141414;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  button:disabled { opacity: .5; cursor: default; }
-  .chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: 2rem; }
-  .chip {
-    font-size: .85rem; padding: .4rem .7rem; cursor: pointer;
-    background: transparent; color: var(--muted);
-    border: 1px solid var(--line); border-radius: 99px; font-weight: 400;
+  form button:disabled { color: #a5a5a5; cursor: default; }
+
+  .suggested { margin: 1.1rem 0 0; font-size: .82rem; color: #5c5c5c; }
+  .suggested span { margin-right: .35rem; }
+  .suggested button {
+    border: 0; background: transparent; padding: 0; cursor: pointer;
+    font-size: .82rem; color: #5c5c5c; text-decoration: underline;
+    text-underline-offset: 2px; font-family: inherit;
   }
-  .chip:hover { color: var(--fg); border-color: var(--fg); }
-  /* pre-wrap only on the answer text — on the container it would render
-     the HTML template's own indentation as blank lines. */
-  .answer-text { white-space: pre-wrap; }
-  .card {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 11px; padding: 1.1rem 1.25rem; margin-bottom: .8rem;
+  .suggested button:hover { color: #141414; }
+  .suggested .sep { color: #c9c9c9; margin: 0 .3rem; }
+
+  #out:not(:empty) { margin-top: 2.5rem; }
+
+  /* An answer reads as a quotation from the guide it came from — a left
+     rule and indentation, not a card. */
+  .answer {
+    border-left: 2px solid #141414;
+    padding-left: 1.25rem;
   }
-  .card.refusal { border-style: dashed; }
+  .answer.refusal { border-left-color: #c9c9c9; }
+  .answer.error { border-left-color: #b0342a; }
+
   .label {
-    font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
-    color: var(--muted); margin-bottom: .5rem;
+    font-size: .7rem; letter-spacing: .1em; text-transform: uppercase;
+    color: #5c5c5c; margin-bottom: .6rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  .thinking { color: var(--muted); }
+  .answer-text { white-space: pre-wrap; }
+
   footer {
-    margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--line);
-    color: var(--muted); font-size: .88rem;
+    margin-top: 4rem; padding-top: 1.25rem; border-top: 1px solid #e2e2df;
+    color: #5c5c5c; font-size: .82rem; line-height: 1.7;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
-  a { color: inherit; }
+  a { color: inherit; text-underline-offset: 2px; }
 </style>
 </head>
 <body>
 <main>
   <h1>IT Help</h1>
-  <p class="sub">An internal IT helpdesk that answers from written guides — and admits when it can't.</p>
+  <p class="sub">
+    Answers IT questions from five written guides. Type below, or use the
+    button in the corner to ask out loud.
+  </p>
 
   <form id="f">
-    <input id="q" placeholder="my wifi keeps dropping" autocomplete="off" maxlength="300" required>
+    <input id="q" placeholder="my wifi keeps dropping" autocomplete="off"
+           maxlength="300" required>
     <button type="submit">Ask</button>
   </form>
 
-  <div class="chips">
-    <button class="chip" type="button">someone nicked my laptop</button>
-    <button class="chip" type="button">the meeting room screen won't connect</button>
-    <button class="chip" type="button">I've forgotten my Mac password</button>
-    <button class="chip" type="button">how do I expense a taxi</button>
-  </div>
+  <p class="suggested">
+    <span>Try:</span><button type="button">someone nicked my laptop</button><span
+    class="sep">/</span><button type="button">the meeting room screen won't connect</button><span
+    class="sep">/</span><button type="button">I've forgotten my Mac password</button><span
+    class="sep">/</span><button type="button">how do I expense a taxi</button>
+  </p>
 
   <div id="out"></div>
 
   <footer>
-    Every answer comes only from
-    <a href="https://github.com/master997/it-help/tree/main/guides">five short guides</a>
-    — nothing is invented. Ask something they don't cover and it will say so, and log the
-    gap for a human. Built by Mohammed Ali.
-    <a href="https://github.com/master997/it-help">Source</a>.
+    Answers come only from
+    <a href="https://github.com/master997/it-help/tree/main/guides">five guides</a>,
+    never invented. Ask something they don't cover and it says so, then logs the
+    gap — that list is what decides which guide gets written next.<br>
+    Built by Mohammed Ali ·
+    <a href="https://github.com/master997/it-help">Source</a>
   </footer>
 </main>
+
+<elevenlabs-convai agent-id="agent_8001kyqbe76qfed81pdbwwf9ghx0"></elevenlabs-convai>
+<script src="https://elevenlabs.io/convai-widget/index.js" async></script>
 
 <script>
   const form = document.getElementById("f");
@@ -109,9 +125,9 @@
   const out = document.getElementById("out");
   const button = form.querySelector("button");
 
-  document.querySelectorAll(".chip").forEach(chip => {
-    chip.addEventListener("click", () => {
-      input.value = chip.textContent;
+  document.querySelectorAll(".suggested button").forEach(link => {
+    link.addEventListener("click", () => {
+      input.value = link.textContent;
       form.requestSubmit();
     });
   });
@@ -122,7 +138,7 @@
     if (!question) return;
 
     button.disabled = true;
-    out.innerHTML = '<div class="card thinking">Looking that up…</div>';
+    out.innerHTML = answer("", "Looking that up…", "refusal");
 
     try {
       const response = await fetch("/ask", {
@@ -133,27 +149,26 @@
       const data = await response.json();
 
       if (!response.ok) {
-        out.innerHTML = card("Error", data.detail || "Something went wrong.", false);
+        out.innerHTML = answer("Error", data.detail || "Something went wrong.", "error");
         return;
       }
-      out.innerHTML = card(
-        data.answered ? "Answer" : "No guide for this",
-        data.answer,
-        !data.answered
-      );
+      out.innerHTML = data.answered
+        ? answer("Answer", data.answer, "")
+        : answer("No guide covers this", data.answer, "refusal");
     } catch {
-      out.innerHTML = card("Error", "Couldn't reach the server. Try again.", false);
+      out.innerHTML = answer("Error", "Couldn't reach the server. Try again.", "error");
     } finally {
       button.disabled = false;
     }
   });
 
-  function card(label, text, refusal) {
-    // textContent then innerHTML escapes whatever the model returned, so a
-    // question containing markup can't inject anything into the page.
+  function answer(label, text, variant) {
+    // textContent then innerHTML escapes whatever came back, so a question
+    // containing markup can't inject anything into the page.
     const escaper = document.createElement("div");
     escaper.textContent = text;
-    return `<div class="card${refusal ? " refusal" : ""}"><div class="label">${label}</div><div class="answer-text">${escaper.innerHTML}</div></div>`;
+    const heading = label ? `<div class="label">${label}</div>` : "";
+    return `<div class="answer ${variant}">${heading}<div class="answer-text">${escaper.innerHTML}</div></div>`;
   }
 </script>
 </body>
